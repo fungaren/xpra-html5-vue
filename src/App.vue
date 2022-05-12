@@ -22,7 +22,7 @@
       <div>
         <i class="mdi mdi-48px mdi-information"></i>
         <p>{{ $t('about') }}</p>
-        <p>{{ $t('title') }} - {{ version }}</p>
+        <p>{{ $t('title') }} - {{ VERSION }}</p>
         <p>
           <a href="https://github.com/fungaren/xpra-html5-vue" target="_blank">
             {{ $t('homepage') }}
@@ -50,7 +50,7 @@
         v-show="!wnd.metadata.iconic" drag-handle=".wnd-title"
         :x="wnd.x" :y="wnd.y"
         :w="wnd.w" :h="wnd.h + (hasTitle(wnd) ? 32 : 0)"
-        :z="wndId == focusedWndId ? 5 : null"
+        :z="wnd.metadata.modal ? 6 : (wndId == focusedWndId ? 5 : null)"
         :min-width="minSize(wnd)[0]" :min-height="minSize(wnd)[1]"
         :max-width="maxSize(wnd)[0]" :max-height="maxSize(wnd)[1]"
         :draggable="draggable(wnd)"
@@ -65,6 +65,7 @@
         <XpraWnd :ref="'wnd_' + wndId" v-model:mask="mask"
           :wndId="Number(wndId)" :wnd="wnd" :decoration="hasTitle(wnd)"
           @ready="wndReady"
+          @focusWnd="focusWnd"
           @pointerUp="pointerup"
           @pointerDown="pointerdown"
           @pointerMove="pointermove"
@@ -143,22 +144,25 @@ export default {
   },
   data() {
     return {
-      version: VERSION,
       client: null,
       decoder: null,
       connecting: true,
       disconnected: false,
       launchingTimeout: 0,
       showKeyboard: platform == 'ios' || platform == 'android',
-      pasteText: '',
       windows: {},
       drawingQueue: [],
       focusedWndId: 0,
       mask: false,
-      timerHideMask: null,
+      timeoutHideMask: null,
       treeData: [],
       dialogAbout: false,
     }
+  },
+  computed: {
+    VERSION() {
+      return VERSION
+    },
   },
   mounted() {
     this.client = new XpraClient(this.$refs.desktop, '', 'admin')
@@ -246,9 +250,9 @@ export default {
     this.client.onWndRaise = (wndId) => {
       const unfocusedWndIds = Object.keys(this.windows).filter(t => t != wndId)
       const wnd = this.windows[wndId]
-      if (wnd.metadata['override-redirect'])
-        return
       if (wnd) {
+        if (wnd.metadata['override-redirect'])
+          return
         this.client.focusWnd(wndId, unfocusedWndIds, wnd.x, wnd.y, wnd.w, wnd.h, wnd.props)
         this.focusedWndId = wndId
       } else {
@@ -382,10 +386,13 @@ export default {
   },
   methods: {
     hasTitle(wnd) {
-      switch (wnd.metadata['window-type'][0]) {
+      const wndType = wnd.metadata['window-type']
+      if (!wndType)
+        return false
+      switch (wndType[0]) {
         case '':
         case 'NORMAL':
-          return Boolean(wnd.metadata.decorations) && !wnd.metadata.fullscreen
+          return wnd.metadata.decorations != 0 && !wnd.metadata.fullscreen
         case 'DIALOG':
         case 'UTILITY':
           return true
@@ -456,10 +463,18 @@ export default {
       this.windows[wndId].$ref = this.$refs['wnd_' + wndId][0]
       const encodings = this.client.serverCaps['encodings.allowed']
       if (encodings) {
-        this.decoder.addWnd(wndId, canvas, encodings)
+        try {
+          this.decoder.addWnd(wndId, canvas, encodings)
+        } catch(e) {
+          // Dismiss
+        }
       } else {
         // Add the window later, because server supported encodings are now unknown.
       }
+    },
+    focusWnd(wndId) {
+      if (wndId != this.focusedWndId)
+        this.client.onWndRaise(wndId)
     },
     pointerup(e, wndId = 0) {
       this.client.pointerActionEvent(e, false, wndId, this.windows)
@@ -521,14 +536,15 @@ export default {
       wnd.y = y
       wnd.w = w
       wnd.h = h
-      this.decoder.resize(wndId, w, h)
 
+      this.decoder.resize(wndId, w, h)
       this.client.moveWnd(wndId, x, y, w, h, wnd.props)
-      if (this.timerHideMask)
-        clearTimeout(this.timerHideMask)
-      this.timerHideMask = setTimeout(() => {
+
+      if (this.timeoutHideMask)
+        clearTimeout(this.timeoutHideMask)
+      this.timeoutHideMask = setTimeout(() => {
         this.mask = false
-        this.timerHideMask = null
+        this.timeoutHideMask = null
       }, 200)
     },
     move(wndId, x, y) {

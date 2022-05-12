@@ -37,8 +37,8 @@ module.exports = defineConfig({
     },
   },
   devServer: {
-    liveReload: false, // Avoid auto refresh
-    hot: false, // Disable Hot Module Replacement
+    // liveReload: false, // Avoid auto refresh
+    // hot: false, // Disable Hot Module Replacement
     host: '0.0.0.0',
     port: 8899,
     proxy: {

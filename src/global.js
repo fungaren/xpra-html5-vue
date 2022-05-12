@@ -747,7 +747,8 @@ class XpraClient {
               'duration', duration, 'iconType', iconType, 'actions', actions, 'hints', hints)
 
             this.notify(summary, body, 'data:image/png;base64,' + toBase64(iconData), () => {
-              this.protocol.send(['notification-close', notifyId, 2/* closedByUser */, '']
+              if (this.connected)
+                this.protocol.send(['notification-close', notifyId, 2/* closedByUser */, '']
             )})
           }
           break

@@ -15,6 +15,8 @@ import {createBitmapFromCompressedRgb} from './rgb_decoder'
 
 function $commonCodecs(available, available2) {
   let r = []
+  if (!available || available.length == 0 || !available2 || available2.length == 0)
+    return r
   for (const t of available) {
     if (available2.indexOf(t) >= 0)
       r.push(t)
@@ -25,6 +27,8 @@ function $commonCodecs(available, available2) {
 function $bestCodec(available, preferred) {
   let best = null
   let bestIdx = 99999
+  if (!available || available.length == 0 || !preferred || preferred.length == 0)
+    return false
   for (const t of available) {
     const idx = preferred.indexOf(t)
     if (idx >= 0 && idx < bestIdx) {
@@ -103,8 +107,12 @@ class XpraDecoderWorkerHost {
         'aac+mpeg4', 'mp3+mpeg4', 'mp3', 'flac', 'wav',
       ]
     )
-    this.audioDecoder = new MSEAudioDecoder(
-      MSEAudioDecoder.codecs[bestCodec], console.error)
+    try {
+      this.audioDecoder = new MSEAudioDecoder(
+        MSEAudioDecoder.codecs[bestCodec], console.error)
+    } catch (e) {
+      console.error(e)
+    }
   }
   /**
    * Add an window to the decoder
@@ -258,6 +266,8 @@ class XpraDecoderWorkerHost {
   sound(codec, data, options, metadata) {
     if (!this.worker)
       throw 'the worker is broken'
+    if (!this.audioDecoder)
+      return
 
     if (codec != this.audioDecoder.codec) {
       console.error('server send sound data codec', codec,
@@ -301,9 +311,10 @@ class XpraDecoderWorkerHost {
   close() {
     if (!this.worker)
       throw 'the worker is broken'
-
-    this.audioDecoder.close()
-    this.audioDecoder = null
+    if (this.audioDecoder) {
+      this.audioDecoder.close()
+      this.audioDecoder = null
+    }
     for (const wndId in this.windows) {
       this.windows[wndId].video?.close()
     }
