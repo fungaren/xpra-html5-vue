@@ -165,6 +165,8 @@ export default {
     },
   },
   mounted() {
+    if (this.client)
+      return
     this.client = new XpraClient(this.$refs.desktop, '', 'admin')
     this.client.onOpen = () => {
       this.connecting = false
@@ -192,12 +194,20 @@ export default {
         clearTimeout(this.launchingTimeout)
         this.launchingTimeout = 0
       }
+
+      const dom = this.$refs['wnd_' + wndId][0]
+      if (dom)
+        this.windows[wndId].$ref = dom
+      else {
+        // Will set $ref in wndReady()
+      }
     }
     this.client.onWndClose = (wndId) => {
       // Window closed by client/server
       if (wndId in this.decoder.windows)
         this.decoder.removeWnd(wndId)
-      delete this.windows[wndId]
+      if (wndId in this.windows)
+        delete this.windows[wndId]
     }
     this.client.onWndMove = (wndId, x, y) => {
       this.windows[wndId].x = x
@@ -276,16 +286,22 @@ export default {
     }
     this.client.onCursor = (w, h, hotX, hotY, url) => {
       for (const wndId in this.windows) {
+        const dom = this.windows[wndId].$ref
+        if (!dom)
+          continue
         if (url)
-          this.windows[wndId].$ref.setCursor(w, h, hotX, hotY, url)
+          dom.setCursor(w, h, hotX, hotY, url)
         else
-          this.windows[wndId].$ref.resetCursor()
+          dom.resetCursor()
       }
     }
     this.client.onEncodings = (encodings) => {
       for (const wndId in this.windows) {
         if (!(wndId in this.decoder.windows)) {
-          const canvas = this.windows[wndId].$ref.$refs.canvas
+          const dom = this.windows[wndId].$ref
+          if (!dom)
+            continue
+          const canvas = dom.$refs.canvas
           this.decoder.addWnd(wndId, canvas, encodings['encodings.allowed'])
         }
       }
@@ -463,11 +479,8 @@ export default {
       this.windows[wndId].$ref = this.$refs['wnd_' + wndId][0]
       const encodings = this.client.serverCaps['encodings.allowed']
       if (encodings) {
-        try {
+        if (!(wndId in this.decoder.windows))
           this.decoder.addWnd(wndId, canvas, encodings)
-        } catch(e) {
-          // Dismiss
-        }
       } else {
         // Add the window later, because server supported encodings are now unknown.
       }

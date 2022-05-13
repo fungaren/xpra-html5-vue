@@ -1,9 +1,10 @@
 <template>
   <div class="xpra-wnd">
-    <div class="wnd-title" :style="{width: (wnd.w - 8) + 'px'}"
+    <div class="wnd-title" :style="{width: wnd.w + 'px'}"
       v-if="decoration" @dblclick="$emit('maximize', wndId)"
       @pointerdown="startMove" @pointerup="stopMove">
-      <img width="24" height="24" :src="iconUrl"><img>
+      <img v-show="iconUrl" width="24" height="24" :src="iconUrl"><img>
+      <i v-show="!iconUrl" class="mdi mdi-24px mdi-application-outline" style="line-height: normal"></i>
       <span>{{ wnd.metadata.title }}</span>
       <i class="mdi mdi-18px mdi-window-minimize" @click="$emit('minimize', wndId)"></i>
       <i v-show="!wnd.metadata.maximized" class="mdi mdi-18px mdi-window-maximize"
@@ -148,7 +149,8 @@ export default {
   color: #fff;
   display: flex;
   padding: 4px 4px;
-  height: calc(32px - 8px);
+  box-sizing: border-box;
+  height: 32px;
 }
 .xpra-wnd .wnd-title span {
   font-weight: bold;
