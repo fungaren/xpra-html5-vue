@@ -151,11 +151,13 @@ export default {
   padding: 4px 4px;
   box-sizing: border-box;
   height: 32px;
+  user-select: none;
 }
 .xpra-wnd .wnd-title span {
   font-weight: bold;
   flex-grow: 1;
   margin-left: 8px;
+  cursor: default;
 }
 .xpra-wnd .wnd-title i {
   margin-left: 1px;

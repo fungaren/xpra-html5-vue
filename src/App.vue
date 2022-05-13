@@ -50,7 +50,8 @@
         v-show="!wnd.metadata.iconic" drag-handle=".wnd-title"
         :x="wnd.x" :y="wnd.y"
         :w="wnd.w" :h="wnd.h + (hasTitle(wnd) ? 32 : 0)"
-        :z="wnd.metadata.modal ? 6 : (wndId == focusedWndId ? 5 : null)"
+        :z="(wnd.metadata.modal || wnd.metadata['override-redirect']) ? 6 :
+          (wndId == focusedWndId ? 5 : null)"
         :min-width="minSize(wnd)[0]" :min-height="minSize(wnd)[1]"
         :max-width="maxSize(wnd)[0]" :max-height="maxSize(wnd)[1]"
         :draggable="draggable(wnd)"
@@ -195,9 +196,9 @@ export default {
         this.launchingTimeout = 0
       }
 
-      const dom = this.$refs['wnd_' + wndId][0]
+      const dom = this.$refs['wnd_' + wndId]
       if (dom)
-        this.windows[wndId].$ref = dom
+        this.windows[wndId].$ref = dom[0]
       else {
         // Will set $ref in wndReady()
       }
@@ -210,8 +211,11 @@ export default {
         delete this.windows[wndId]
     }
     this.client.onWndMove = (wndId, x, y) => {
-      this.windows[wndId].x = x
-      this.windows[wndId].y = y
+      const wnd = this.windows[wndId]
+      if (!wnd)
+        return
+      wnd.x = x
+      wnd.y = y
     }
     this.client.onWndMetadata = (wndId, metadata) => {
       const wnd = this.windows[wndId]
@@ -390,11 +394,15 @@ export default {
       }
     }
     document.onkeydown = (e) => {
+      if (this.focusedWndId == 0)
+        return
       const allowDefault = this.client.keyEvent(e, true, this.focusedWndId)
       if (!allowDefault)
         e.preventDefault()
     }
     document.onkeyup = (e) => {
+      if (this.focusedWndId == 0)
+        return
       const allowDefault = this.client.keyEvent(e, false, this.focusedWndId)
       if (!allowDefault)
         e.preventDefault()
@@ -477,6 +485,8 @@ export default {
     },
     wndReady(wndId, canvas) {
       this.windows[wndId].$ref = this.$refs['wnd_' + wndId][0]
+      if (!this.client)
+        return
       const encodings = this.client.serverCaps['encodings.allowed']
       if (encodings) {
         if (!(wndId in this.decoder.windows))
