@@ -17,10 +17,10 @@ Compatibility:
 
 - **This project has been tested on Xpra server version v4.3.2, and may not work on previous version.**
 - Tested on Firefox (99.0.1), Chrome (99.0.4). IE is not supported at all and you know why.
+- Mobile browser is not fully supported.
 
 Working in progress:
 
-- Modal dialogs
 - Printing
 - Scale
 - File transfer

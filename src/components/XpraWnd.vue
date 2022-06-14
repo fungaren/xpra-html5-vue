@@ -1,9 +1,10 @@
 <template>
-  <div class="xpra-window">
-    <div class="wnd-title" :style="{width: (wnd.w - 8) + 'px'}"
+  <div class="xpra-wnd">
+    <div class="wnd-title" :style="{width: wnd.w + 'px'}"
       v-if="decoration" @dblclick="$emit('maximize', wndId)"
       @pointerdown="startMove" @pointerup="stopMove">
-      <img width="24" height="24" :src="iconUrl"><img>
+      <img v-show="iconUrl" width="24" height="24" :src="iconUrl"><img>
+      <i v-show="!iconUrl" class="mdi mdi-24px mdi-application-outline" style="line-height: normal"></i>
       <span>{{ wnd.metadata.title }}</span>
       <i class="mdi mdi-18px mdi-window-minimize" @click="$emit('minimize', wndId)"></i>
       <i v-show="!wnd.metadata.maximized" class="mdi mdi-18px mdi-window-maximize"
@@ -106,12 +107,14 @@ export default {
         this.$refs.view.style.cursor = `url(${url}) ${hotX} ${hotY}, auto`
     },
     resetCursor() {
-      this.$refs.view.style.cursor = 'default'
+      if (this.$refs.view)
+        this.$refs.view.style.cursor = 'default'
     },
     startMove() {
       if (this.wnd.metadata.fullscreen || this.wnd.metadata.maximized)
         return
       this.$emit('update:mask', true)
+      this.$emit('focusWnd', this.wndId)
     },
     stopMove() {
       if (this.wnd.metadata.fullscreen || this.wnd.metadata.maximized)
@@ -137,39 +140,42 @@ export default {
   color: white;
   text-align: center;
 }
-.xpra-window {
+.xpra-wnd {
   display: inline-block;
   position: absolute;
 }
-.wnd-title {
+.xpra-wnd .wnd-title {
   background: #777;
   color: #fff;
   display: flex;
   padding: 4px 4px;
-  height: calc(32px - 8px);
+  box-sizing: border-box;
+  height: 32px;
+  user-select: none;
 }
-.wnd-title span {
+.xpra-wnd .wnd-title span {
   font-weight: bold;
   flex-grow: 1;
   margin-left: 8px;
+  cursor: default;
 }
-.wnd-title i {
+.xpra-wnd .wnd-title i {
   margin-left: 1px;
   padding: 0 4px;
   cursor: pointer;
 }
-.wnd-title i:hover {
+.xpra-wnd .wnd-title i:hover {
   background: rgba(255, 255, 255, .5);
 }
-.wnd-body {
+.xpra-wnd .wnd-body {
   position: relative;
 }
-.wnd-body canvas {
+.xpra-wnd .wnd-body canvas {
   position: absolute;
   left: 0;
   top: 0;
 }
-.wnd-body video {
+.xpra-wnd .wnd-body video {
   position: absolute;
   left: 0;
   top: 0;

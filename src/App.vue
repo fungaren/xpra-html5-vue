@@ -22,7 +22,7 @@
       <div>
         <i class="mdi mdi-48px mdi-information"></i>
         <p>{{ $t('about') }}</p>
-        <p>{{ $t('title') }} - {{ version }}</p>
+        <p>{{ $t('title') }} - {{ VERSION }}</p>
         <p>
           <a href="https://github.com/fungaren/xpra-html5-vue" target="_blank">
             {{ $t('homepage') }}
@@ -50,7 +50,8 @@
         v-show="!wnd.metadata.iconic" drag-handle=".wnd-title"
         :x="wnd.x" :y="wnd.y"
         :w="wnd.w" :h="wnd.h + (hasTitle(wnd) ? 32 : 0)"
-        :z="wndId == focusedWndId ? 5 : null"
+        :z="(wnd.metadata.modal || wnd.metadata['override-redirect']) ? 6 :
+          (wndId == focusedWndId ? 5 : null)"
         :min-width="minSize(wnd)[0]" :min-height="minSize(wnd)[1]"
         :max-width="maxSize(wnd)[0]" :max-height="maxSize(wnd)[1]"
         :draggable="draggable(wnd)"
@@ -65,6 +66,7 @@
         <XpraWnd :ref="'wnd_' + wndId" v-model:mask="mask"
           :wndId="Number(wndId)" :wnd="wnd" :decoration="hasTitle(wnd)"
           @ready="wndReady"
+          @focusWnd="focusWnd"
           @pointerUp="pointerup"
           @pointerDown="pointerdown"
           @pointerMove="pointermove"
@@ -143,24 +145,29 @@ export default {
   },
   data() {
     return {
-      version: VERSION,
       client: null,
       decoder: null,
       connecting: true,
       disconnected: false,
       launchingTimeout: 0,
       showKeyboard: platform == 'ios' || platform == 'android',
-      pasteText: '',
       windows: {},
       drawingQueue: [],
       focusedWndId: 0,
       mask: false,
-      timerHideMask: null,
+      timeoutHideMask: null,
       treeData: [],
       dialogAbout: false,
     }
   },
+  computed: {
+    VERSION() {
+      return VERSION
+    },
+  },
   mounted() {
+    if (this.client)
+      return
     this.client = new XpraClient(this.$refs.desktop, '', 'admin')
     this.client.onOpen = () => {
       this.connecting = false
@@ -188,16 +195,27 @@ export default {
         clearTimeout(this.launchingTimeout)
         this.launchingTimeout = 0
       }
+
+      const dom = this.$refs['wnd_' + wndId]
+      if (dom)
+        this.windows[wndId].$ref = dom[0]
+      else {
+        // Will set $ref in wndReady()
+      }
     }
     this.client.onWndClose = (wndId) => {
       // Window closed by client/server
       if (wndId in this.decoder.windows)
         this.decoder.removeWnd(wndId)
-      delete this.windows[wndId]
+      if (wndId in this.windows)
+        delete this.windows[wndId]
     }
     this.client.onWndMove = (wndId, x, y) => {
-      this.windows[wndId].x = x
-      this.windows[wndId].y = y
+      const wnd = this.windows[wndId]
+      if (!wnd)
+        return
+      wnd.x = x
+      wnd.y = y
     }
     this.client.onWndMetadata = (wndId, metadata) => {
       const wnd = this.windows[wndId]
@@ -246,9 +264,9 @@ export default {
     this.client.onWndRaise = (wndId) => {
       const unfocusedWndIds = Object.keys(this.windows).filter(t => t != wndId)
       const wnd = this.windows[wndId]
-      if (wnd.metadata['override-redirect'])
-        return
       if (wnd) {
+        if (wnd.metadata['override-redirect'])
+          return
         this.client.focusWnd(wndId, unfocusedWndIds, wnd.x, wnd.y, wnd.w, wnd.h, wnd.props)
         this.focusedWndId = wndId
       } else {
@@ -272,16 +290,22 @@ export default {
     }
     this.client.onCursor = (w, h, hotX, hotY, url) => {
       for (const wndId in this.windows) {
+        const dom = this.windows[wndId].$ref
+        if (!dom)
+          continue
         if (url)
-          this.windows[wndId].$ref.setCursor(w, h, hotX, hotY, url)
+          dom.setCursor(w, h, hotX, hotY, url)
         else
-          this.windows[wndId].$ref.resetCursor()
+          dom.resetCursor()
       }
     }
     this.client.onEncodings = (encodings) => {
       for (const wndId in this.windows) {
         if (!(wndId in this.decoder.windows)) {
-          const canvas = this.windows[wndId].$ref.$refs.canvas
+          const dom = this.windows[wndId].$ref
+          if (!dom)
+            continue
+          const canvas = dom.$refs.canvas
           this.decoder.addWnd(wndId, canvas, encodings['encodings.allowed'])
         }
       }
@@ -370,11 +394,15 @@ export default {
       }
     }
     document.onkeydown = (e) => {
+      if (this.focusedWndId == 0)
+        return
       const allowDefault = this.client.keyEvent(e, true, this.focusedWndId)
       if (!allowDefault)
         e.preventDefault()
     }
     document.onkeyup = (e) => {
+      if (this.focusedWndId == 0)
+        return
       const allowDefault = this.client.keyEvent(e, false, this.focusedWndId)
       if (!allowDefault)
         e.preventDefault()
@@ -382,10 +410,13 @@ export default {
   },
   methods: {
     hasTitle(wnd) {
-      switch (wnd.metadata['window-type'][0]) {
+      const wndType = wnd.metadata['window-type']
+      if (!wndType)
+        return false
+      switch (wndType[0]) {
         case '':
         case 'NORMAL':
-          return Boolean(wnd.metadata.decorations) && !wnd.metadata.fullscreen
+          return wnd.metadata.decorations != 0 && !wnd.metadata.fullscreen
         case 'DIALOG':
         case 'UTILITY':
           return true
@@ -454,12 +485,19 @@ export default {
     },
     wndReady(wndId, canvas) {
       this.windows[wndId].$ref = this.$refs['wnd_' + wndId][0]
+      if (!this.client)
+        return
       const encodings = this.client.serverCaps['encodings.allowed']
       if (encodings) {
-        this.decoder.addWnd(wndId, canvas, encodings)
+        if (!(wndId in this.decoder.windows))
+          this.decoder.addWnd(wndId, canvas, encodings)
       } else {
         // Add the window later, because server supported encodings are now unknown.
       }
+    },
+    focusWnd(wndId) {
+      if (wndId != this.focusedWndId)
+        this.client.onWndRaise(wndId)
     },
     pointerup(e, wndId = 0) {
       this.client.pointerActionEvent(e, false, wndId, this.windows)
@@ -521,14 +559,15 @@ export default {
       wnd.y = y
       wnd.w = w
       wnd.h = h
-      this.decoder.resize(wndId, w, h)
 
+      this.decoder.resize(wndId, w, h)
       this.client.moveWnd(wndId, x, y, w, h, wnd.props)
-      if (this.timerHideMask)
-        clearTimeout(this.timerHideMask)
-      this.timerHideMask = setTimeout(() => {
+
+      if (this.timeoutHideMask)
+        clearTimeout(this.timeoutHideMask)
+      this.timeoutHideMask = setTimeout(() => {
         this.mask = false
-        this.timerHideMask = null
+        this.timeoutHideMask = null
       }, 200)
     },
     move(wndId, x, y) {
